@@ -1,110 +1,235 @@
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
-canvas.width = 800;
-canvas.height = 600;
+"use strict";
 
-let rows = parseInt(prompt("Ingresa el número de filas de bloques (ej. 5):", 5));
-let cols = parseInt(prompt("Ingresa el número de columnas de bloques (ej. 8):", 8));
-if (isNaN(rows) || rows < 1) rows = 5;
-if (isNaN(cols) || cols < 1) cols = 8;
+const canvasWidth = 800;
+const canvasHeight = 600;
 
-let score = 0;
-let lives = 3;
-let timerStarted = false;
-let startTime = 0;
-const timerElement = document.getElementById("timer");
+let ctx;
+let game;
+let canvas;
 
-const paddle = new Paddle(canvas.width/2 - 50, canvas.height - 30, 100, 20, 7);
-const ball = new Ball(canvas.width/2, canvas.height/2, 10, 4, -4);
+class Game {
 
-const blockWidth = 80;
-const blockHeight = 20;
-const blocks = [];
-const colors = ["#0b1a3f","#1f2b5a","#3a4978","#7f7f7f","#bfbfbf","#ffffff"];
+    constructor() {
 
-for (let r=0; r<rows; r++) {
-    for (let c=0; c<cols; c++) {
-        const x = c * (blockWidth + 10) + 35;
-        const y = r * (blockHeight + 10) + 50;
-        const color = colors[r % colors.length];
-        blocks.push(new Block(x, y, blockWidth, blockHeight, color));
-    }
-}
+        this.score = 0;
+        this.lives = 3;
 
-function gameLoop() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+        this.timerStarted = false;
+        this.startTime = 0;
+        this.timerElement = document.getElementById("timer");
 
-    if (!timerStarted && (ball.speedX !== 0 || ball.speedY !== 0)) {
-        timerStarted = true;
-        startTime = Date.now();
+        this.initObjects();
+        this.createEventListeners();
     }
 
-    paddle.update(canvas);
-    paddle.draw(ctx);
+    initObjects() {
 
-    ball.update(canvas);
-    ball.draw(ctx);
+        let rows = parseInt(prompt("Ingresa el número de filas de bloques (ej. 5):", 5));
+        let cols = parseInt(prompt("Ingresa el número de columnas de bloques (ej. 8):", 8));
 
-    for (let block of blocks) {
-        if (!block.destroyed) {
-            block.draw(ctx);
+        if (isNaN(rows) || rows < 1) rows = 5;
+        if (isNaN(cols) || cols < 1) cols = 8;
 
-            if (ball.x + ball.radius > block.x &&
-                ball.x - ball.radius < block.x + block.width &&
-                ball.y + ball.radius > block.y &&
-                ball.y - ball.radius < block.y + block.height) {
-                
-                ball.speedY *= -1;
-                block.destroyed = true;
-                score++;
-                document.getElementById("score").innerText = "Bloques destruidos: " + score;
+        this.totalBlocks = rows * cols;
 
-                if (score % 5 === 0) {
-                    ball.speedX *= 1.2;
-                    ball.speedY *= 1.2;
-                }
+        this.paddle = new Paddle(
+            canvasWidth / 2 - 50,
+            canvasHeight - 30,
+            100,
+            20,
+            "white"
+        );
+
+        this.ball = new Ball(
+            canvasWidth / 2,
+            canvasHeight / 2,
+            20,
+            20,
+            "white"
+        );
+
+        this.actors = [];
+
+        const blockWidth = 80;
+        const blockHeight = 20;
+
+        const colors = ["#0b1a3f","#1f2b5a","#3a4978","#7f7f7f","#bfbfbf","#ffffff"];
+
+        for (let r = 0; r < rows; r++) {
+
+            for (let c = 0; c < cols; c++) {
+
+                const x = c * (blockWidth + 10) + 35;
+                const y = r * (blockHeight + 10) + 50;
+
+                const block = new Block(
+                    x,
+                    y,
+                    blockWidth,
+                    blockHeight,
+                    colors[r % colors.length]
+                );
+
+                this.actors.push(block);
             }
         }
     }
 
-    if (ball.x + ball.radius > paddle.x &&
-        ball.x - ball.radius < paddle.x + paddle.width &&
-        ball.y + ball.radius > paddle.y) {
-        ball.speedY *= -1;
+    draw(ctx) {
+
+        for (let actor of this.actors) {
+            actor.draw(ctx);
+        }
+
+        this.paddle.draw(ctx);
+        this.ball.draw(ctx);
     }
 
-    if (ball.y - ball.radius > canvas.height) {
-        lives--;
-        document.getElementById("lives").innerText = "Vidas: " + lives;
-        ball.x = canvas.width/2;
-        ball.y = canvas.height/2;
-        ball.speedY = -4;
-        ball.speedX = 4;
+    update() {
+
+        if (!this.timerStarted) {
+            this.timerStarted = true;
+            this.startTime = Date.now();
+        }
+
+        this.paddle.update(canvas);
+        this.ball.update(canvas);
+
+        // colisión paddle
+        if (
+            this.ball.x > this.paddle.x &&
+            this.ball.x < this.paddle.x + this.paddle.width &&
+            this.ball.y > this.paddle.y
+        ) {
+            this.ball.speedY *= -1;
+        }
+
+        // colisión bloques
+        for (let block of this.actors) {
+
+            if (!block.destroyed) {
+
+                if (
+                    this.ball.x > block.x &&
+                    this.ball.x < block.x + block.width &&
+                    this.ball.y > block.y &&
+                    this.ball.y < block.y + block.height
+                ) {
+
+                    block.destroyed = true;
+
+                    this.ball.speedY *= -1;
+
+                    this.score++;
+
+                    document.getElementById("score").innerText =
+                        "Bloques destruidos: " + this.score;
+
+                    if (this.score % 5 === 0) {
+                        this.ball.speedX *= 1.2;
+                        this.ball.speedY *= 1.2;
+                    }
+                }
+            }
+        }
+
+        // 🏆 VICTORIA
+        if (this.score === this.totalBlocks) {
+
+            const totalTime = Date.now() - this.startTime;
+
+            const seconds = Math.floor(totalTime / 1000);
+            const milliseconds = totalTime % 1000;
+
+            alert(
+                "¡VICTORY!\n\nTiempo: " +
+                seconds + ":" +
+                milliseconds.toString().padStart(3,'0') +
+                " (s:ms)"
+            );
+
+            location.reload();
+        }
+
+        // perder vida
+        if (this.ball.y > canvasHeight) {
+
+            this.lives--;
+
+            document.getElementById("lives").innerText =
+                "Vidas: " + this.lives;
+
+            this.ball.x = canvasWidth / 2;
+            this.ball.y = canvasHeight / 2;
+            this.ball.speedX = 4;
+            this.ball.speedY = -4;
+        }
+
+        if (this.lives <= 0) {
+
+            alert("GAME OVER");
+            location.reload();
+        }
+
+        // cronómetro
+        if (this.timerStarted) {
+
+            const elapsed = Date.now() - this.startTime;
+
+            const seconds = Math.floor(elapsed / 1000);
+            const milliseconds = elapsed % 1000;
+
+            this.timerElement.innerText =
+                seconds + ":" + milliseconds.toString().padStart(3,'0');
+        }
     }
 
-    if (lives <= 0) {
-        alert("GAME OVER");
-        document.location.reload();
-        return;
-    }
+    createEventListeners() {
 
-    if (score === blocks.length) {
-        const totalTime = Date.now() - startTime;
-        const seconds = Math.floor(totalTime / 1000);
-        const milliseconds = totalTime % 1000;
-        alert(`¡GANASTE! Tiempo: ${seconds}:${milliseconds.toString().padStart(3,'0')} (s:ms)`);
-        document.location.reload();
-        return;
-    }
+        window.addEventListener("keydown", (event) => {
 
-    if (timerStarted) {
-        const elapsed = Date.now() - startTime;
-        const seconds = Math.floor(elapsed / 1000);
-        const milliseconds = elapsed % 1000;
-        timerElement.innerText = `${seconds}:${milliseconds.toString().padStart(3,'0')}`;
-    }
+            if (event.key == "ArrowLeft") {
+                this.paddle.moveLeft = true;
+            }
 
-    requestAnimationFrame(gameLoop);
+            if (event.key == "ArrowRight") {
+                this.paddle.moveRight = true;
+            }
+        });
+
+        window.addEventListener("keyup", (event) => {
+
+            if (event.key == "ArrowLeft") {
+                this.paddle.moveLeft = false;
+            }
+
+            if (event.key == "ArrowRight") {
+                this.paddle.moveRight = false;
+            }
+        });
+    }
 }
 
-gameLoop();
+function main() {
+
+    canvas = document.getElementById("canvas");
+
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+
+    ctx = canvas.getContext("2d");
+
+    game = new Game();
+
+    drawScene();
+}
+
+function drawScene() {
+
+    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+    game.update();
+    game.draw(ctx);
+
+    requestAnimationFrame(drawScene);
+}
